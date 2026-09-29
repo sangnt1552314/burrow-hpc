@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=51"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "burrow-hpc"
+version = "0.1.0"
+description = "Terminal and web dashboard for HPC clusters"
+requires-python = ">=3.9"
+
+[project.scripts]
+burrow = "burrow.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
