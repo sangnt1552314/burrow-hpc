@@ -1,5 +1,7 @@
 import sys
 
+from burrow.core.pbs import get_jobs, get_jobs_raw
+
 
 def main():
     if len(sys.argv) < 2:
@@ -15,7 +17,7 @@ def main():
     command = sys.argv[1]
 
     if command == "jobs":
-        print("Jobs coming soon")
+        print(get_jobs_raw())
 
     elif command == "storage":
         print("Storage coming soon")
