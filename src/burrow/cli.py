@@ -17,7 +17,18 @@ def main():
     command = sys.argv[1]
 
     if command == "jobs":
-        print(get_jobs_raw())
+        jobs = get_jobs()
+
+        print(f"{'JOB ID':<18} {'NAME':<12} {'QUEUE':<8} {'STATE':<6} {'RUNTIME':<10}")
+
+        for job in jobs:
+            print(
+                f"{job.job_id:<18} "
+                f"{job.name:<12} "
+                f"{job.queue:<8} "
+                f"{job.state:<6} "
+                f"{job.runtime:<10}"
+            )
 
     elif command == "storage":
         print("Storage coming soon")
