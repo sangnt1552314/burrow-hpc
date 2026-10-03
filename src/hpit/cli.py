@@ -144,8 +144,20 @@ def cmd_usage(args: argparse.Namespace) -> None:
 
 
 def cmd_cluster(args: argparse.Namespace) -> None:
+    from hpit.core.cluster import submit_hint
+
     status = api.get_cluster_status()
-    print(f"Free GPUs: {status.gpus_free} / {status.gpus_total} (offline nodes excluded)")
+    print(
+        f"Free GPUs you can use: {status.my_gpus_free}  "
+        f"(whole cluster: {status.gpus_free} / {status.gpus_total}, offline nodes excluded)"
+    )
+
+    if status.placements:
+        print("\nWhere can my job start now?")
+        print(f"  {'GPUS':>4}  {'QUEUE':<9} {'WAITING':>7}  {'SUBMIT WITH':<40} NODES WITH ROOM")
+        for p in status.placements:
+            nodes = ", ".join(f"{n.name} ({n.gpus_free} {n.gpu_model})" for n in p.nodes[:3]) or "none (would wait)"
+            print(f"  {p.gpus:>4}  {p.queue.name:<9} {p.waiting:>7}  {submit_hint(p):<40} {nodes}")
 
     if status.queues_error:
         print(f"\nQueues: {status.queues_error}")
@@ -159,7 +171,11 @@ def cmd_cluster(args: argparse.Namespace) -> None:
     if free_nodes:
         print("\nNodes with free GPUs")
         for n in free_nodes:
-            print(f"  {n.name:<12} {n.gpus_free}/{n.gpus_total} GPUs  {n.cpus_free}/{n.cpus_total} CPUs  mem {n.mem}")
+            only = f"  only for queue {n.dedicated_queue}" if n.dedicated_queue else ""
+            print(
+                f"  {n.name:<10} {n.gpus_free}/{n.gpus_total} {n.gpu_model:<5} pool {n.pool:<15}"
+                f" {n.cpus_free}/{n.cpus_total} CPUs  mem {n.mem}{only}"
+            )
 
 
 def cmd_doctor(args: argparse.Namespace) -> None:

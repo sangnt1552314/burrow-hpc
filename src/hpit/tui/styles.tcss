@@ -156,6 +156,10 @@ DataTable > .datatable--hover {
 
 /* Cluster */
 
+#placement-table {
+    height: auto;
+}
+
 #queue-table {
     height: auto;
     max-height: 10;

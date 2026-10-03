@@ -13,7 +13,7 @@ from hpit.core import config
 from hpit.core.errors import HPITError
 from hpit.core.models import (
     ClusterStatus, DiskUsage, FileEntry, Job, JobDetails, LogTail, MemberUsage,
-    NodeStat, Project, QueueStat, Quota, StorageEntry, StorageScan,
+    NodeStat, Placement, Project, QueueInfo, QueueStat, Quota, StorageEntry, StorageScan,
 )
 
 GB = 1024**3
@@ -209,20 +209,41 @@ def get_quotas() -> List[Quota]:
 
 def get_cluster_status() -> ClusterStatus:
     rng = random.Random(int(time.time() // 300))
+    from hpit.core.cluster import nodes_with_room
+
     nodes = []
     for i in range(3, 47):
         free = rng.choice([0, 0, 0, 0, 0, 1, 2, 8])
+        pool = "aisg" if i >= 31 else "nus_hpc_large" if 7 <= i <= 10 else "nus_hpc_medium" if 11 <= i <= 14 else "nus_hpc"
         nodes.append(NodeStat(
             f"hopper-{i:02d}", "offline" if i == 6 else ("free" if free else "job-busy"),
-            free, 8, free * 14, 112, "215gb/2tb", 8 - free,
+            free, 8, free * 14, 112, "215 GB / 2 TB", 8 - free,
+            pool=pool, dedicated_queue="special" if i in (5, 6) else ("AISG_debug" if i >= 31 else ""),
+            gpu_model="H100" if i <= 6 else "H200", mem_free_bytes=free * 250 * GB,
         ))
+    my_queues = [
+        QueueInfo("small", "nus_hpc", 1, 2, "144:00:00", "3", "auto"),
+        QueueInfo("medium", "nus_hpc_medium", 3, 7, "96:00:00", "2", "auto"),
+        QueueInfo("large", "nus_hpc_large", 8, 16, "48:00:00", "1", "auto"),
+        QueueInfo("special", "nus_hpc", 1, 64, "48:00:00", "4", "-q special"),
+    ]
+    waiting = {"small": 298, "medium": 47, "large": 35, "special": 0}
+    placements = [
+        Placement(g, q, nodes_with_room(nodes, q, g), waiting[q.name])
+        for g in (1, 2, 4, 8) for q in my_queues if q.min_gpus <= g <= q.max_gpus
+    ]
     queues = [
         QueueStat("auto", 137, 475, 45), QueueStat("small", 112, 298, 23),
         QueueStat("medium", 4, 47, 18), QueueStat("large", 3, 35, 10),
         QueueStat("interactive", 6, 42, 7), QueueStat("smallx", 7, 12, 4),
         QueueStat("mediumx", 4, 10, 4), QueueStat("largex", 1, 19, 5),
     ]
-    return ClusterStatus(queues, nodes, queues_updated=time.strftime("%Y-%m-%d %H:%M"))
+    usable = sum(n.gpus_free for n in nodes if n.available and n.pool == "nus_hpc_large" or
+                 n.available and n.pool in ("nus_hpc", "nus_hpc_medium") and n.dedicated_queue in ("", "special"))
+    return ClusterStatus(
+        queues, nodes, queues_updated=time.strftime("%Y-%m-%d %H:%M"),
+        placements=placements, my_gpus_free=usable,
+    )
 
 
 _logged_in = True

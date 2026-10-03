@@ -7,6 +7,7 @@ from textual.containers import Vertical
 from textual.widgets import Static
 
 from hpit.core import api, config
+from hpit.core.cluster import best_placement, submit_hint
 from hpit.core.models import Job, Quota
 from hpit.core.units import human_bytes
 from hpit.tui.pages.base import Page
@@ -58,11 +59,29 @@ class OverviewPage(Page):
     def load_cluster(self) -> None:
         status, error = call_backend(api.get_cluster_status)
         if status is None:
-            value = Text(error or "--", style="#E06C75")
+            rows = [("Free GPUs", Text(error or "--", style="#E06C75"))]
         else:
-            value = Text(str(status.gpus_free), style="bold #98C379" if status.gpus_free else "bold #E06C75")
-            value.append(f" of {status.gpus_total} on the cluster", style=MUTED)
-        self.app.call_from_thread(self._set_rows, "cluster_rows", [("Free GPUs", value)])
+            free = Text(str(status.my_gpus_free), style="bold #98C379" if status.my_gpus_free else "bold #E06C75")
+            free.append(f" usable by you · {status.gpus_free} free on the whole cluster", style=MUTED)
+            rows = [("Free GPUs", free), ("Next 1-GPU job", self._suggestion(status))]
+        self.app.call_from_thread(self._set_rows, "cluster_rows", rows)
+
+    @staticmethod
+    def _suggestion(status) -> Text:
+        best = best_placement(status.placements, 1)
+        if best is None:
+            waiting = min((p.waiting for p in status.placements if p.gpus == 1), default=0)
+            return Text(f"no free GPU in your queues now · {waiting} jobs waiting", style="#E5C07B")
+        text = Text()
+        for i, node in enumerate(best.nodes[:2]):
+            if i:
+                text.append(" or ", style=MUTED)
+            text.append(node.name, style="bold #61AFEF")
+            text.append(f" ({node.gpus_free} {node.gpu_model} free)", style=MUTED)
+        text.append("  ")
+        text.append(submit_hint(best), style="#E5C07B")
+        text.append(f"  · {best.waiting} waiting in {best.queue.name}", style=MUTED)
+        return text
 
     @work(thread=True, exclusive=True, group="overview-projects")
     def load_projects(self) -> None:

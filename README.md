@@ -12,7 +12,7 @@ HPIT only runs cheap, read-only system commands (`qstat`, `df`, `find`,
 - **Overview** — your jobs, free GPUs on the cluster, home/scratch quota, project GPU-hours left
 - **Jobs** — table of your jobs, filter with `/`, toggle finished jobs with `h`
 - **Projects** — GPU-hours left, reserved, end date; members' running/queued jobs and usage for any period (`[` `]` month, `c` calendar; default this month)
-- **Cluster** — free GPUs per node and running/waiting jobs per queue (like `hpc gstat`)
+- **Cluster** — which nodes have room for a 1/2/4/8-GPU job in the queues *you* can use (and how to submit), queue pressure, and per-node GPUs, model, pool and dedicated queue (like `hpc gstat`, but per-queue counts are exact)
 - **Job details** — resources, node, project, script, working directory, log paths
 - **Logs** — tail stdout / stderr using the paths PBS reports; follow mode
 - **Storage** — home, scratch and your project folders (`/scratch/Projects/…`, `/Project_Storage/…`) with quotas (from the reports `hpc space` uses); open one with `→` to see folder sizes (`du`, cached), `←` to go back

@@ -163,10 +163,34 @@ class NodeStat:
     cpus_total: int
     mem: str
     jobs: int
+    pool: str = ""             # node_pool; each queue uses one pool
+    dedicated_queue: str = ""  # set when only one queue may use the node
+    gpu_model: str = ""
+    mem_free_bytes: int = 0
 
     @property
     def available(self) -> bool:
         return not any(s in self.state for s in ("offline", "down", "unknown"))
+
+
+@dataclass
+class QueueInfo:
+    name: str
+    pool: str
+    min_gpus: int
+    max_gpus: int
+    max_walltime: str
+    max_run: str
+    via: str  # how you reach it: "auto" (routed) or "-q <name>" (on its user list)
+
+
+@dataclass
+class Placement:
+    """Where a job of `gpus` GPUs could start right now."""
+    gpus: int
+    queue: QueueInfo
+    nodes: List[NodeStat]  # nodes with room for the job now, best first
+    waiting: int = 0       # jobs already waiting in that queue
 
 
 @dataclass
@@ -175,6 +199,9 @@ class ClusterStatus:
     nodes: List[NodeStat]
     queues_updated: str = ""
     queues_error: Optional[str] = None
+    placements: List[Placement] = field(default_factory=list)
+    # Free GPUs on nodes your queues can actually use.
+    my_gpus_free: int = 0
 
     @property
     def gpus_free(self) -> int:
