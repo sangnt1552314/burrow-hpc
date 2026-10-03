@@ -1,0 +1,192 @@
+"""Fake data for HPIT_MOCK=1, e.g. developing on a laptop without PBS.
+
+Functions mirror the real backend signatures; `hpit.core.api` picks
+one or the other, so the UI never checks for mock mode itself.
+"""
+
+import os
+import random
+import time
+from typing import Dict, List, Optional, Tuple
+
+from hpit.core import config
+from hpit.core.errors import HPITError
+from hpit.core.models import (
+    DiskUsage, FileEntry, Job, JobDetails, LogTail, StorageEntry, StorageScan,
+)
+
+GB = 1024**3
+_STARTED = time.time()
+
+# (id, name, state, hours already running, requested walltime)
+_JOBS = [
+    ("637523", "colosseum-lingbot-vla-v2-6b-so101-cube-drawer-10ep", "R", 16.4, "96:00:00"),
+    ("638106", "colosseum-pi05-so101-stack-bowls-40k", "R", 15.1, "48:00:00"),
+    ("638107", "colosseum-groot-n17-so101-screwdriver-40k", "R", 2.3, "30:00:00"),
+    ("638109", "colosseum-g05-so101-stack-bowls-40k", "Q", 0, "48:00:00"),
+    ("638110", "colosseum-molmoact2-so101-upright-bottle", "Q", 0, "96:00:00"),
+    ("638111", "eval-lingbot-sweep[3]", "H", 0, "05:00:00"),
+]
+_FINISHED = [
+    ("636001", "colosseum-pi05-so101-cube-drawer-10ep", "F", 0, "48:00:00"),
+    ("636002", "smoke-test", "F", 0, "00:10:00"),
+]
+_cancelled = set()
+_scans: Dict[str, StorageScan] = {}
+
+
+def _runtime(hours: float) -> str:
+    if hours <= 0:
+        return "--"
+    seconds = int(hours * 3600 + time.time() - _STARTED)
+    return f"{seconds // 3600:02d}:{seconds // 60 % 60:02d}:{seconds % 60:02d}"
+
+
+def _job(row: Tuple) -> Job:
+    job_id, name, state, hours, walltime = row
+    return Job(
+        job_id=f"{job_id}.hopper-m-02", name=name, user=config.USER,
+        runtime=_runtime(hours) if state == "R" else ("23:59:59" if state == "F" else "--"),
+        state=state, queue="small", gpus=1, cpus=12, memory="225.0 GB",
+        requested_walltime=walltime,
+    )
+
+
+def get_jobs(include_finished: bool = False) -> List[Job]:
+    rows = (_FINISHED if include_finished else []) + _JOBS
+    return [_job(r) for r in rows if r[0] not in _cancelled]
+
+
+def _find(job_id: str) -> Tuple:
+    short = job_id.split(".")[0]
+    for row in _JOBS + _FINISHED:
+        if row[0] == short and short not in _cancelled:
+            return row
+    raise HPITError(f"Job {job_id} not found.")
+
+
+def get_job_details(job_id: str) -> JobDetails:
+    row = _find(job_id)
+    job = _job(row)
+    running = job.state == "R"
+    workdir = f"/scratch/{config.USER}/projects/robocolosseum-training"
+    return JobDetails(
+        job=job,
+        node=f"hopper-{20 + int(row[0]) % 9}" if running else "--",
+        project="CFP05-CF-002",
+        script=f"pbs/{row[1].replace('colosseum-', '')}.pbs",
+        workdir=workdir,
+        stdout_path=f"{workdir}/{row[1]}.o{row[0]}",
+        stderr_path=f"{workdir}/{row[1]}.e{row[0]}",
+        stderr_joined=row[0].endswith("3"),
+        submitted="Fri Oct  2 17:50:54 2026",
+        started="Sat Oct  3 03:03:23 2026" if running else "--",
+        memory_used="32.8 GB" if running else "--",
+        cpu_time="46:11:42" if running else "--",
+        cpu_percent="242%" if running else "--",
+        exit_status="0" if job.state == "F" else "--",
+        comment="Job run on hopper-26" if running else "Not Running: Insufficient GPUs",
+    )
+
+
+def cancel_job(job_id: str) -> None:
+    _find(job_id)
+    _cancelled.add(job_id.split(".")[0])
+
+
+def get_pbs_version() -> str:
+    return "2024.1.0 (mock)"
+
+
+def tail_job_log(details: JobDetails, stream: str, lines: int) -> LogTail:
+    if details.job.state in ("Q", "H"):
+        raise HPITError("Log file not found yet: the job has not started.")
+
+    if stream == "stderr" and details.stderr_joined:
+        log = tail_job_log(details, "stdout", lines)
+        log.note = "stderr is merged into stdout for this job (Join_Path=oe)."
+        return log
+
+    rng = random.Random(details.job.job_id + stream)
+    out = []
+    for step in range(0, lines * 50, 50):
+        if stream == "stdout":
+            loss = 2.5 * (0.999 ** step) + rng.random() * 0.05
+            out.append(f"[train] step {step:>6}  loss {loss:.4f}  lr 1.0e-04  {rng.randint(80, 99)} it/s")
+        elif step % 500 == 0:
+            out.append(f"WARNING: step {step}: grad norm {rng.random() * 10:.2f} clipped")
+
+    path = details.stdout_path if stream == "stdout" else details.stderr_path
+    return LogTail(path=path, lines=out[-lines:])
+
+
+def tail_job_log_by_id(job_id: str, stream: str, lines: int) -> LogTail:
+    return tail_job_log(get_job_details(job_id), stream, lines)
+
+
+# Fake scratch tree: path relative to scratch -> {child: size in GB}.
+_TREE: Dict[str, Dict[str, float]] = {
+    "": {"cache": 41.3, "outputs": 21.8, "datasets": 11.1, "misc": 2.3},
+    "cache": {"huggingface": 35.1, "pip": 6.2},
+    "cache/huggingface": {"hub": 33.0, "datasets": 2.1},
+    "outputs": {"lingbot": 12.4, "pi05": 6.1, "groot": 3.3},
+    "datasets": {"so101": 11.1},
+}
+
+
+def _relative(path: str) -> str:
+    relative = os.path.relpath(path, config.SCRATCH)
+    return "" if relative == "." else relative
+
+
+def get_disk_usage(path: str) -> DiskUsage:
+    return DiskUsage(path, 1024 * GB, int(726 * GB), int(298 * GB))
+
+
+def scan_directory(path: str) -> StorageScan:
+    time.sleep(1.5)  # Pretend du is working.
+    children = _TREE.get(_relative(path), {})
+    entries = [
+        StorageEntry(path=os.path.join(path, name), name=name, size_bytes=int(gb * GB))
+        for name, gb in sorted(children.items(), key=lambda kv: -kv[1])
+    ]
+    scan = StorageScan(path, sum(e.size_bytes for e in entries), time.time(), entries)
+    _scans[path] = scan
+    return scan
+
+
+def load_cached_scan(path: str) -> Optional[StorageScan]:
+    return _scans.get(path)
+
+
+def list_directory(path: str) -> List[FileEntry]:
+    now = time.time()
+    children = _TREE.get(_relative(path))
+    if children is None:
+        files = [("README.md", 4_096), ("train.log", 52 * 1024**2), ("model.safetensors", 13 * GB)]
+        return [FileEntry(n, os.path.join(path, n), "f", s, now - 3600 * i) for i, (n, s) in enumerate(files)]
+    return [
+        FileEntry(name, os.path.join(path, name), "d", 4096, now - 86400 * i)
+        for i, name in enumerate(sorted(children))
+    ]
+
+
+def find_large_files(root: str, min_mb: int = 1024, limit: int = 100) -> List[FileEntry]:
+    time.sleep(1.0)
+    now = time.time()
+    files = [
+        ("cache/huggingface/hub/models--lingbot/model-00001.safetensors", 9.6 * GB),
+        ("outputs/lingbot/checkpoint-40000/model.safetensors", 12.4 * GB),
+        ("datasets/so101/episodes.tar", 4.2 * GB),
+    ]
+    return sorted(
+        (FileEntry(rel, os.path.join(root, rel), "f", int(size), now - 7200) for rel, size in files),
+        key=lambda e: -e.size_bytes,
+    )
+
+
+def get_doctor() -> List[Tuple[str, str]]:
+    from hpit.core import system
+    rows = system.get_doctor()
+    return [(k, "2024.1.0 (mock)" if k == "PBS version" else v) for k, v in rows]
+

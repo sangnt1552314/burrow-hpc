@@ -3,13 +3,19 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "burrow-hpc"
+name = "hpit"
 version = "0.1.0"
 description = "Terminal and web dashboard for HPC clusters"
 requires-python = ">=3.9"
+dependencies = [
+    "textual==8.2.8",
+]
 
 [project.scripts]
-burrow = "burrow.cli:main"
+hpit = "hpit.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+hpit = ["tui/*.tcss"]
