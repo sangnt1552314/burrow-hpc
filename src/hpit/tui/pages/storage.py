@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Optional
+from typing import List, Optional
 
 from rich.text import Text
 from textual import work
@@ -9,7 +9,7 @@ from textual.binding import Binding
 from textual.widgets import Static
 
 from hpit.core import api, config
-from hpit.core.models import DiskUsage, StorageScan
+from hpit.core.models import Quota, StorageScan
 from hpit.core.units import human_bytes
 from hpit.tui.pages.base import Page
 from hpit.tui.theme import MUTED
@@ -53,24 +53,38 @@ class StoragePage(Page):
 
     @work(thread=True, exclusive=True, group="storage-df")
     def load_usage(self) -> None:
-        usage, error = call_backend(api.get_disk_usage, self.root)
-        self.app.call_from_thread(self._render_usage, usage, error)
+        # Site quota reports (home + scratch); fall back to df for scratch.
+        quotas, _ = call_backend(api.get_quotas)
+        quotas = quotas or []
+        if not any(q.name == "Scratch" for q in quotas):
+            usage, error = call_backend(api.get_disk_usage, self.root)
+            if usage:
+                quotas.append(Quota("Scratch", usage.path, usage.used_bytes, usage.total_bytes))
+            elif not quotas:
+                self.app.call_from_thread(self._render_usage, [], error)
+                return
+        self.app.call_from_thread(self._render_usage, quotas, None)
 
-    def _render_usage(self, usage: Optional[DiskUsage], error: Optional[str]) -> None:
+    def _render_usage(self, quotas: List[Quota], error: Optional[str]) -> None:
         box = self.query_one("#storage-usage", Static)
-        if usage is None:
+        if not quotas:
             box.update(Text(error or "--", style="#E06C75"))
             return
 
-        color = "#E06C75" if usage.percent >= 90 else "#E5C07B" if usage.percent >= 75 else "#61AFEF"
-        text = Text("Scratch", style="bold")
-        text.append(f"   {usage.percent:.0f}% used", style=color)
-        text.append(
-            f"   {human_bytes(usage.used_bytes)} of {human_bytes(usage.total_bytes)}"
-            f" · {human_bytes(usage.available_bytes)} free\n",
-            style=MUTED,
-        )
-        text.append_text(usage_bar(usage.percent / 100, 48, color))
+        text = Text()
+        for i, q in enumerate(quotas):
+            color = "#E06C75" if q.percent >= 90 else "#E5C07B" if q.percent >= 75 else "#61AFEF"
+            if i:
+                text.append("\n\n")
+            text.append(f"{q.name:<9}", style="bold")
+            text.append_text(usage_bar(q.percent / 100, 36, color))
+            text.append(f"  {q.percent:.0f}%", style=color)
+            details = f"   {human_bytes(q.used_bytes)} of {human_bytes(q.limit_bytes)}"
+            if q.files is not None:
+                details += f" · {q.files:,} files"
+            if q.reported_at:
+                details += f" · report {format_age(q.reported_at)}"
+            text.append(details, style=MUTED)
         box.update(text)
 
     def _show_path(self, path: str, scan_if_missing: bool) -> None:

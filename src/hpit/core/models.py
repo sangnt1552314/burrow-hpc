@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from datetime import date
 from typing import List, Optional
 
 
@@ -27,6 +28,7 @@ class Job:
     cpus: int = 0
     memory: str = "--"
     requested_walltime: str = "--"
+    project: str = ""
 
     @property
     def short_id(self) -> str:
@@ -55,6 +57,127 @@ class JobDetails:
     cpu_percent: str = "--"
     exit_status: str = "--"
     comment: str = ""
+
+
+@dataclass
+class Quota:
+    """A usage-vs-limit report, e.g. home or scratch quota."""
+    name: str
+    path: str
+    used_bytes: int
+    limit_bytes: int
+    files: Optional[int] = None
+    reported_at: Optional[float] = None
+
+    @property
+    def percent(self) -> float:
+        return 100.0 * self.used_bytes / self.limit_bytes if self.limit_bytes else 0.0
+
+
+# 1 GPU-hour = 100 service units (SU), as `hpc project` computes it.
+SU_PER_GPU_HOUR = 100.0
+
+
+@dataclass
+class Project:
+    name: str
+    start_date: str
+    end_date: str
+    active: bool
+    users: List[str]
+    credits_su: float = 0.0
+    net_su: float = 0.0
+    # Held for running jobs; returned when they finish early.
+    reserved_su: float = 0.0
+    period: str = ""
+
+    @property
+    def gpu_hours_total(self) -> float:
+        return self.credits_su / SU_PER_GPU_HOUR
+
+    @property
+    def gpu_hours_left(self) -> float:
+        return self.net_su / SU_PER_GPU_HOUR
+
+    @property
+    def gpu_hours_reserved(self) -> float:
+        return self.reserved_su / SU_PER_GPU_HOUR
+
+    @property
+    def ended(self) -> bool:
+        # amgr can still list a project as active after its end date.
+        try:
+            return date.fromisoformat(self.end_date) < date.today()
+        except ValueError:
+            return False
+
+    @property
+    def used_fraction(self) -> float:
+        return 1 - self.net_su / self.credits_su if self.credits_su else 0.0
+
+
+@dataclass
+class MemberUsage:
+    user: str
+    gpu_hours: float
+    jobs: int
+    # Live, from the site's qstat snapshot (all users' jobs):
+    running: int = 0          # running jobs, any project
+    running_here: int = 0     # of those, charged to this project
+    gpus_here: int = 0        # estimated GPUs in use on this project
+    reserved_gpu_hours: float = 0.0  # credit held by those running jobs
+    queued: int = 0           # waiting jobs, any project (not charged yet)
+
+
+@dataclass
+class SnapshotJob:
+    """One row of the site's periodic cluster-wide qstat snapshot."""
+    job_id: str
+    user: str
+    queue: str
+    state: str
+    cpus: int
+    memory: str
+
+
+@dataclass
+class QueueStat:
+    name: str
+    running: int
+    waiting: int
+    users_waiting: int
+
+
+@dataclass
+class NodeStat:
+    name: str
+    state: str
+    gpus_free: int
+    gpus_total: int
+    cpus_free: int
+    cpus_total: int
+    mem: str
+    jobs: int
+
+    @property
+    def available(self) -> bool:
+        return not any(s in self.state for s in ("offline", "down", "unknown"))
+
+
+@dataclass
+class ClusterStatus:
+    queues: List[QueueStat]
+    nodes: List[NodeStat]
+    queues_updated: str = ""
+    queues_error: Optional[str] = None
+
+    @property
+    def gpus_free(self) -> int:
+        return sum(n.gpus_free for n in self.nodes if n.available)
+
+    @property
+    def gpus_total(self) -> int:
+        return sum(n.gpus_total for n in self.nodes if n.available)
 
 
 @dataclass

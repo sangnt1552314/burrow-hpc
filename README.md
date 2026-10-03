@@ -9,11 +9,13 @@ HPIT only runs cheap, read-only system commands (`qstat`, `df`, `find`,
 
 ## Features
 
-- **Overview** — running / queued / held jobs, GPUs in use, scratch quota
+- **Overview** — your jobs, free GPUs on the cluster, home/scratch quota, project GPU-hours left
 - **Jobs** — table of your jobs, filter with `/`, toggle finished jobs with `h`
+- **Projects** — GPU-hours left, reserved, end date; members' running/queued jobs and usage for any period (`[` `]` month, `c` calendar; default this month)
+- **Cluster** — free GPUs per node and running/waiting jobs per queue (like `hpc gstat`)
 - **Job details** — resources, node, project, script, working directory, log paths
 - **Logs** — tail stdout / stderr using the paths PBS reports; follow mode
-- **Storage** — scratch usage bar (instant, `df`) and per-folder sizes (`du`, cached)
+- **Storage** — home and scratch quota (from the site reports `hpc space` uses) and per-folder sizes (`du`, cached)
 - **Files** — read-only browser with sizes, dates, and a "files over 1 GB" search
 - **Tools** — doctor page: versions, paths, configuration
 - **Cancel job** — `k`, always behind a confirmation showing the exact job ID and name
@@ -37,7 +39,11 @@ Make sure `~/.local/bin` is on your `PATH`.
 hpit jobs [-a]              # your jobs (-a includes finished jobs)
 hpit job <job-id>           # details of one job
 hpit logs <job-id> [-e] [-n 100]   # tail stdout (or stderr with -e)
-hpit storage [path] [--scan]       # scratch usage; folder sizes from cache or a new du scan
+hpit storage [path] [--scan]       # home/scratch quota; folder sizes from cache or a new du scan
+hpit projects               # GPU-hours left per project (needs amgr login)
+hpit usage <project> [start] [end] # members' usage + live jobs; start/end YYYY-MM-DD, or YYYY-MM for a month (default: this month)
+hpit cluster                # free GPUs and queue status
+hpit login                  # log in to amgr (asks for your password; stores nothing)
 hpit doctor                 # environment and configuration check
 hpit tui                    # terminal UI
 ```
@@ -62,10 +68,19 @@ where they work. Job lists refresh automatically every 60 seconds.
 
 ## Configuration
 
-All optional, set as environment variables:
+Settings can live in a `.env` file (see `.env.example`). HPIT reads the
+file named by `HPIT_ENV_FILE` (default `~/.config/hpit/.env`); real
+environment variables win over the file.
+
+```bash
+cp .env.example .env && chmod 600 .env
+echo "export HPIT_ENV_FILE=$PWD/.env" >> ~/.bashrc
+```
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
+| `HPIT_ENV_FILE` | `~/.config/hpit/.env` | Where to read settings from |
+| `HPIT_AMGR_PASSWORD` | empty | NUS password for automatic `amgr login` (`.env` only) |
 | `HPIT_CLUSTER_NAME` | `Hopper` | Name shown in the header |
 | `HPIT_SCRATCH` | `/scratch/$USER` | Scratch root for Storage and Files |
 | `HPIT_REFRESH_INTERVAL` | `60` | Seconds between job refreshes (`0` = off) |
@@ -84,6 +99,19 @@ HPIT_MOCK=1 hpit tui
 Shows fake jobs, job details, logs, storage, and files, so you can work on
 the UI on a laptop. (Real mode relies on GNU `find`/`du`, as on Linux.)
 
+## Project credits (amgr)
+
+Project data comes from `amgr` (Altair Budgets), which needs a token from
+`amgr login`. The token is cached in `~/.am/` and expires. Either:
+
+- run `hpit login` (or `amgr login`) when it expires, or
+- put `HPIT_AMGR_PASSWORD` in your `.env`, and HPIT logs in for you.
+
+HPIT passes the password to `amgr` on stdin, never as a command-line
+argument (which other users could see with `ps`), tries at most once per
+session (to avoid locking your account with a wrong password), and ignores
+the password if the `.env` file is readable by anyone but you.
+
 ## Architecture
 
 ```text
@@ -96,6 +124,9 @@ core/logs.py         tail
 core/storage.py      df, du (+ cache)
 core/files.py        find
 core/system.py       doctor info
+core/accounting.py   amgr: projects, usage, login
+core/cluster.py      pbsnodes + the site's qstat snapshot
+core/quota.py        home / scratch quota reports
         ↓
 core/command.py      subprocess with timeout; no shell=True
 ```
@@ -109,12 +140,13 @@ directly.
 - Everything is read-only except job cancellation, which needs explicit
   confirmation in the TUI.
 - Commands are run with argument lists, never through a shell.
+- `.env` is git-ignored; keep it `chmod 600` (HPIT refuses the password otherwise).
 - Keep personal access tokens out of `git remote` URLs on shared machines.
 
 ## Roadmap
 
-- [x] CLI: jobs, job, logs, storage, doctor
-- [x] TUI: overview, jobs, job details, logs, storage, files, tools
+- [x] CLI: jobs, job, logs, storage, projects, usage, cluster, login, doctor
+- [x] TUI: overview, jobs, projects, cluster, job details, logs, storage, files, tools
 - [x] Mock mode
 - [ ] Streamlit web UI (`hpit web`, read-only)
 - [ ] Slurm support

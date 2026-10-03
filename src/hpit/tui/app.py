@@ -12,10 +12,12 @@ from hpit.core import api, config
 from hpit.core.command import kill_running_commands
 from hpit.core.models import Job
 from hpit.tui.pages.base import Page
+from hpit.tui.pages.cluster import ClusterPage
 from hpit.tui.pages.files import FilesPage
 from hpit.tui.pages.jobs import JobsPage
 from hpit.tui.pages.logs import LogsPage
 from hpit.tui.pages.overview import OverviewPage
+from hpit.tui.pages.projects import ProjectsPage
 from hpit.tui.pages.storage import StoragePage
 from hpit.tui.pages.tools import ToolsPage
 from hpit.tui.screens.dialogs import ConfirmCancelScreen, HelpScreen
@@ -29,6 +31,8 @@ from hpit.tui.widgets.sidebar import Sidebar
 PAGES = [
     ("overview", "Overview", OverviewPage),
     ("jobs", "Jobs", JobsPage),
+    ("projects", "Projects", ProjectsPage),
+    ("cluster", "Cluster", ClusterPage),
     ("storage", "Storage", StoragePage),
     ("logs", "Logs", LogsPage),
     ("files", "Files", FilesPage),

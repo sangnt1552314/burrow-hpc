@@ -48,7 +48,7 @@ HELP_TEXT = [
         ("↑ ↓", "Move"),
         ("Enter", "Open"),
         ("Esc", "Back"),
-        ("1 – 6", "Jump to a page"),
+        ("1 – 8", "Jump to a page"),
         ("r", "Refresh"),
         ("?", "This help"),
         ("q", "Quit"),
@@ -59,6 +59,13 @@ HELP_TEXT = [
         ("l", "Logs of selected job"),
         ("k", "Cancel selected job (asks first)"),
     ]),
+    ("Projects", [
+        ("↑ ↓", "Members of the selected project"),
+        ("[ ]", "Previous / next month"),
+        ("c", "Pick dates on a calendar"),
+        ("L", "Log in to amgr"),
+    ]),
+    ("Cluster", [("f", "Only nodes with free GPUs")]),
     ("Logs", [("o / e", "stdout / stderr"), ("f", "Follow (auto refresh)")]),
     ("Storage", [("s", "Scan folder sizes (du)"), ("Backspace", "Up a folder")]),
     ("Files", [("b", "Find files over 1 GB"), ("s / ~", "Scratch / home"), ("Backspace", "Up")]),
@@ -84,3 +91,27 @@ class HelpScreen(ModalScreen):
         with Vertical(id="help", classes="panel") as panel:
             panel.border_title = "Help"
             yield Static(text)
+
+
+class PasswordScreen(ModalScreen):
+    """Ask for the NUS password for `amgr login`. Returns it, or None.
+
+    The password is passed straight to amgr on stdin and never stored.
+    """
+
+    BINDINGS = [Binding("escape", "dismiss(None)", "Cancel")]
+
+    def compose(self) -> ComposeResult:
+        from textual.widgets import Input
+
+        with Vertical(id="dialog", classes="panel") as dialog:
+            dialog.border_title = "amgr login"
+            yield Static("Project credits need an accounting login (same as `amgr login`).")
+            yield Input(placeholder="NUS password", password=True, id="password")
+            yield Static(
+                Text("Sent to amgr on stdin only; HPIT does not store it.", style=MUTED),
+                classes="message",
+            )
+
+    def on_input_submitted(self, event) -> None:
+        self.dismiss(event.value or None)

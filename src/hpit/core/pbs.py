@@ -145,6 +145,7 @@ def _parse_job(job_id: str, info: Dict[str, Any]) -> Job:
         cpus=_int(requested.get("ncpus")),
         memory=_memory(requested.get("mem", "")),
         requested_walltime=requested.get("walltime", "--"),
+        project=info.get("project", ""),
     )
 
 

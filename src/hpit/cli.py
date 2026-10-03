@@ -69,11 +69,19 @@ def cmd_logs(args: argparse.Namespace) -> None:
 
 def cmd_storage(args: argparse.Namespace) -> None:
     path = args.path or config.SCRATCH
-    usage = api.get_disk_usage(config.SCRATCH)
-    print(
-        f"Scratch {config.SCRATCH}: {usage.percent:.0f}% used "
-        f"({human_bytes(usage.used_bytes)} of {human_bytes(usage.total_bytes)})"
-    )
+    quotas = api.get_quotas()
+    if not quotas:
+        usage = api.get_disk_usage(config.SCRATCH)
+        print(
+            f"Scratch {config.SCRATCH}: {usage.percent:.0f}% used "
+            f"({human_bytes(usage.used_bytes)} of {human_bytes(usage.total_bytes)})"
+        )
+    for quota in quotas:
+        files = f", {quota.files:,} files" if quota.files is not None else ""
+        print(
+            f"{quota.name:<8} {quota.path:<24} {quota.percent:5.1f}% used "
+            f"({human_bytes(quota.used_bytes)} of {human_bytes(quota.limit_bytes)}{files})"
+        )
 
     if args.scan:
         print(f"Scanning {path} with du (this can take minutes)...", file=sys.stderr)
@@ -89,9 +97,88 @@ def cmd_storage(args: argparse.Namespace) -> None:
         print(f"  {human_bytes(entry.size_bytes):>10}  {entry.name}")
 
 
+def cmd_projects(args: argparse.Namespace) -> None:
+    projects = api.get_projects()
+    if not projects:
+        print("You are not a member of any project.")
+        return
+
+    print(f"{'PROJECT':<16} {'GPU-H LEFT':>12} {'OF TOTAL':>10} {'RESERVED':>9}  {'ENDS':<10}  STATUS")
+    for p in projects:
+        status = "ended" if p.ended else ("active" if p.active else "inactive")
+        print(
+            f"{p.name:<16} {p.gpu_hours_left:>12,.1f} {p.gpu_hours_total:>10,.0f} "
+            f"{p.gpu_hours_reserved:>9,.1f}  {p.end_date:<10}  {status}"
+        )
+    print("\nUse a project in a job script with:  #PBS -P <project>")
+
+
+def cmd_usage(args: argparse.Namespace) -> None:
+    from datetime import date
+
+    from hpit.core.accounting import month_bounds, month_range
+
+    start, end = month_range()
+    if args.start and len(args.start) == 7 and not args.end:
+        # "YYYY-MM" means that whole month, like `hpc project-usage`.
+        first, last = month_bounds(date.fromisoformat(args.start + "-01"))
+        start, end = first.isoformat(), last.isoformat()
+    else:
+        start, end = args.start or start, args.end or end
+    project = next((p for p in api.get_projects() if p.name == args.project), None)
+    if project is None:
+        raise HPITError(f"You are not a member of project {args.project}.")
+
+    print(f"{project.name}  {start} → {end}  ({project.gpu_hours_left:,.1f} of {project.gpu_hours_total:,.0f} GPU-h left)")
+    print(f"{'USER':<16} {'RUN HERE':>8} {'GPUS':>5} {'RESERVED':>9} {'RUN ALL':>8} {'QUEUED':>7}   {'GPU-H USED':>10} {'JOBS':>5}")
+    for m in api.get_project_usage(project.name, start, end, project.users):
+        print(
+            f"{m.user:<16} {m.running_here:>8} {m.gpus_here:>5} {m.reserved_gpu_hours:>9,.0f} "
+            f"{m.running:>8} {m.queued:>7}   {m.gpu_hours:>10,.1f} {m.jobs:>5}"
+        )
+    print(
+        "\nRUN HERE / GPUS / RESERVED: jobs running on this project now (GPUs estimated, 12 CPUs per GPU).\n"
+        "RUN ALL / QUEUED: jobs in any project, from the site's qstat snapshot.\n"
+        "GPU-H USED: this period; negative = credit returned by jobs that finished early."
+    )
+
+
+def cmd_cluster(args: argparse.Namespace) -> None:
+    status = api.get_cluster_status()
+    print(f"Free GPUs: {status.gpus_free} / {status.gpus_total} (offline nodes excluded)")
+
+    if status.queues_error:
+        print(f"\nQueues: {status.queues_error}")
+    else:
+        print(f"\nQueues (snapshot {status.queues_updated})")
+        print(f"  {'QUEUE':<12} {'RUNNING':>8} {'WAITING':>8} {'USERS WAITING':>14}")
+        for q in status.queues:
+            print(f"  {q.name:<12} {q.running:>8} {q.waiting:>8} {q.users_waiting:>14}")
+
+    free_nodes = [n for n in status.nodes if n.available and n.gpus_free]
+    if free_nodes:
+        print("\nNodes with free GPUs")
+        for n in free_nodes:
+            print(f"  {n.name:<12} {n.gpus_free}/{n.gpus_total} GPUs  {n.cpus_free}/{n.cpus_total} CPUs  mem {n.mem}")
+
+
 def cmd_doctor(args: argparse.Namespace) -> None:
     for name, value in api.get_doctor():
         print(f"{name:<24}{value}")
+
+
+def cmd_login(args: argparse.Namespace) -> None:
+    import getpass
+
+    from hpit.core import accounting
+
+    if accounting.is_logged_in() and not args.force:
+        print("Already logged in to amgr (token is valid).")
+        return
+
+    password = getpass.getpass("NUS password for amgr: ")
+    accounting.login(password)
+    print("Logged in to amgr.")
 
 
 def cmd_tui(args: argparse.Namespace) -> None:
@@ -131,8 +218,24 @@ def build_parser() -> argparse.ArgumentParser:
     storage.add_argument("--scan", action="store_true", help="measure folder sizes now with du (slow)")
     storage.set_defaults(func=cmd_storage)
 
+    projects = commands.add_parser("projects", help="your projects: GPU-hours left, end dates (needs amgr login)")
+    projects.set_defaults(func=cmd_projects)
+
+    usage = commands.add_parser("usage", help="GPU-hours used per project member (needs amgr login)")
+    usage.add_argument("project")
+    usage.add_argument("start", nargs="?", help="YYYY-MM-DD, or YYYY-MM for a whole month (default: this month)")
+    usage.add_argument("end", nargs="?", help="YYYY-MM-DD (default: today)")
+    usage.set_defaults(func=cmd_usage)
+
+    cluster = commands.add_parser("cluster", help="free GPUs and queue status")
+    cluster.set_defaults(func=cmd_cluster)
+
     doctor = commands.add_parser("doctor", help="check environment and configuration")
     doctor.set_defaults(func=cmd_doctor)
+
+    login = commands.add_parser("login", help="log in to amgr for project credits (asks for password)")
+    login.add_argument("--force", action="store_true", help="log in even if the token is still valid")
+    login.set_defaults(func=cmd_login)
 
     tui = commands.add_parser("tui", help="open the terminal UI")
     tui.set_defaults(func=cmd_tui)

@@ -17,16 +17,28 @@ _running: Set[subprocess.Popen] = set()
 _lock = threading.Lock()
 
 
-def run_command(args: List[str], timeout: Optional[float] = 30) -> CommandResult:
+def run_command(
+    args: List[str],
+    timeout: Optional[float] = 30,
+    input: Optional[str] = None,
+    new_session: bool = False,
+) -> CommandResult:
+    """Run a command without a shell.
+
+    new_session detaches it from the terminal, so a password prompt
+    reads `input` from stdin instead of the TUI's terminal.
+    """
     # Return codes follow shell conventions so callers only need to
     # check returncode: 127 = not found, 126 = cannot run, 124 = timed out.
     try:
         process = subprocess.Popen(
             args,
+            stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             errors="replace",
+            start_new_session=new_session,
         )
     except FileNotFoundError:
         return CommandResult(
@@ -45,7 +57,7 @@ def run_command(args: List[str], timeout: Optional[float] = 30) -> CommandResult
         _running.add(process)
 
     try:
-        stdout, stderr = process.communicate(timeout=timeout)
+        stdout, stderr = process.communicate(input=input, timeout=timeout)
     except subprocess.TimeoutExpired:
         process.kill()
         process.communicate()

@@ -12,7 +12,8 @@ from typing import Dict, List, Optional, Tuple
 from hpit.core import config
 from hpit.core.errors import HPITError
 from hpit.core.models import (
-    DiskUsage, FileEntry, Job, JobDetails, LogTail, StorageEntry, StorageScan,
+    ClusterStatus, DiskUsage, FileEntry, Job, JobDetails, LogTail, MemberUsage,
+    NodeStat, Project, QueueStat, Quota, StorageEntry, StorageScan,
 )
 
 GB = 1024**3
@@ -48,7 +49,7 @@ def _job(row: Tuple) -> Job:
         job_id=f"{job_id}.hopper-m-02", name=name, user=config.USER,
         runtime=_runtime(hours) if state == "R" else ("23:59:59" if state == "F" else "--"),
         state=state, queue="small", gpus=1, cpus=12, memory="225.0 GB",
-        requested_walltime=walltime,
+        requested_walltime=walltime, project="CFP05-CF-002",
     )
 
 
@@ -190,3 +191,61 @@ def get_doctor() -> List[Tuple[str, str]]:
     rows = system.get_doctor()
     return [(k, "2024.1.0 (mock)" if k == "PBS version" else v) for k, v in rows]
 
+
+
+def get_quotas() -> List[Quota]:
+    now = time.time()
+    return [
+        Quota("Home", os.path.expanduser("~"), int(14.7 * GB), 40 * GB, 54593, now - 1800),
+        Quota("Scratch", config.SCRATCH, int(726 * GB), 1024 * GB, 281207, now - 600),
+    ]
+
+
+def get_cluster_status() -> ClusterStatus:
+    rng = random.Random(int(time.time() // 300))
+    nodes = []
+    for i in range(3, 47):
+        free = rng.choice([0, 0, 0, 0, 0, 1, 2, 8])
+        nodes.append(NodeStat(
+            f"hopper-{i:02d}", "offline" if i == 6 else ("free" if free else "job-busy"),
+            free, 8, free * 14, 112, "215gb/2tb", 8 - free,
+        ))
+    queues = [
+        QueueStat("auto", 137, 475, 45), QueueStat("small", 112, 298, 23),
+        QueueStat("medium", 4, 47, 18), QueueStat("large", 3, 35, 10),
+        QueueStat("interactive", 6, 42, 7), QueueStat("smallx", 7, 12, 4),
+        QueueStat("mediumx", 4, 10, 4), QueueStat("largex", 1, 19, 5),
+    ]
+    return ClusterStatus(queues, nodes, queues_updated=time.strftime("%Y-%m-%d %H:%M"))
+
+
+_logged_in = True
+
+
+def is_logged_in() -> bool:
+    return _logged_in
+
+
+def login(password: str) -> None:
+    global _logged_in
+    if not password:
+        raise HPITError("No password given.")
+    _logged_in = True
+
+
+def get_projects() -> List[Project]:
+    return [
+        Project("CFP01-CF-060", "2025-01-01", "2026-09-30", True,
+                ["e0920848", "sutanto.patrick", config.USER], 8_000_000, 4_998_277.75, 11_400, "y2034"),
+        Project("CFP05-CF-002", "2026-07-30", "2027-07-30", True,
+                ["xuanweiliu", "duanj1", config.USER, "keerthivasanm"], 10_000_000, 9_482_701.6, 125_383.3, "y2034"),
+    ]
+
+
+def get_project_usage(name: str, start: str, end: str, members: Optional[List[str]] = None) -> List[MemberUsage]:
+    return [
+        MemberUsage("shailesh.xml", -159.7, 6, running=1, running_here=1, gpus_here=8, reserved_gpu_hours=384, queued=3),
+        MemberUsage(config.USER, 1.0, 10, running=3, running_here=3, gpus_here=3, reserved_gpu_hours=174, queued=2),
+        MemberUsage("xuanweiliu", -3.3, 2, running=2, running_here=1, gpus_here=1, reserved_gpu_hours=72, queued=1),
+        MemberUsage("keerthivasanm", 9.4, 6), MemberUsage("duanj1", 0.0, 0),
+    ]

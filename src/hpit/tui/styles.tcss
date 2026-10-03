@@ -154,6 +154,24 @@ DataTable > .datatable--hover {
     height: 1fr;
 }
 
+/* Cluster */
+
+#queue-table {
+    height: auto;
+    max-height: 10;
+}
+
+/* Projects */
+
+#projects-table {
+    height: auto;
+    max-height: 12;
+}
+
+#usage-table {
+    height: 1fr;
+}
+
 /* Storage */
 
 #storage-usage {
@@ -198,8 +216,19 @@ ConfirmCancelScreen, HelpScreen {
     width: 72;
     height: auto;
     padding: 1 2;
+    border: round $primary;
+    border-title-color: $primary;
+}
+
+#dialog.danger {
     border: round $error;
     border-title-color: $error;
+}
+
+#password {
+    margin-top: 1;
+    border: tall $primary;
+    background: $surface;
 }
 
 #dialog-buttons {
@@ -209,6 +238,23 @@ ConfirmCancelScreen, HelpScreen {
 
 #dialog-buttons Button {
     margin-left: 2;
+}
+
+CalendarScreen {
+    align: center middle;
+    background: $background 60%;
+}
+
+#calendar {
+    width: 44;
+    height: auto;
+    padding: 1 2;
+    border: round $primary;
+    border-title-color: $primary;
+}
+
+#calendar-help {
+    text-align: center;
 }
 
 #help {
