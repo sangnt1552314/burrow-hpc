@@ -198,6 +198,12 @@ def get_quotas() -> List[Quota]:
     return [
         Quota("Home", os.path.expanduser("~"), int(14.7 * GB), 40 * GB, 54593, now - 1800),
         Quota("Scratch", config.SCRATCH, int(726 * GB), 1024 * GB, 281207, now - 600),
+        Quota("CFP01-CF-060 scratch", "/scratch/Projects/CFP-01/CFP01-CF-060",
+              int(3884 * GB), 4096 * GB, 3391276, now - 600),
+        Quota("CFP05-CF-002 scratch", "/scratch/Projects/CFP-05/CFP05-CF-002",
+              int(4476 * GB), 10240 * GB, 34724, now - 600),
+        Quota("CFP01-CF-060 storage", "/Project_Storage/CFP-01/CFP01-CF-060",
+              int(25.6 * 1024 * GB), 30 * 1024 * GB, 8551292, now - 900),
     ]
 
 

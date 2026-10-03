@@ -47,7 +47,7 @@ HELP_TEXT = [
     ("Anywhere", [
         ("↑ ↓", "Move"),
         ("Enter", "Open"),
-        ("Esc", "Back"),
+        ("Esc", "Back to the menu (sidebar)"),
         ("1 – 8", "Jump to a page"),
         ("r", "Refresh"),
         ("?", "This help"),
@@ -67,8 +67,8 @@ HELP_TEXT = [
     ]),
     ("Cluster", [("f", "Only nodes with free GPUs")]),
     ("Logs", [("o / e", "stdout / stderr"), ("f", "Follow (auto refresh)")]),
-    ("Storage", [("s", "Scan folder sizes (du)"), ("Backspace", "Up a folder")]),
-    ("Files", [("b", "Find files over 1 GB"), ("s / ~", "Scratch / home"), ("Backspace", "Up")]),
+    ("Storage", [("→ / ⏎", "Open location / folder"), ("← / ⌫", "Back up"), ("s", "Scan folder sizes (du)")]),
+    ("Files", [("→ / ⏎", "Open folder"), ("← / ⌫", "Back up"), ("b", "Find files over 1 GB"), ("s / ~", "Scratch / home")]),
 ]
 
 

@@ -23,6 +23,24 @@ class Table(DataTable):
         return row_key.value
 
 
+class NavTable(Table):
+    """A folder table: → (or Enter) opens the row, ← goes back up.
+
+    "Back" calls the parent page's action_up().
+    """
+
+    BINDINGS = [
+        Binding("enter", "select_cursor", "Open", show=False),
+        Binding("right", "select_cursor", "Open", key_display="→"),
+        Binding("left", "go_up", "Back", key_display="←"),
+    ]
+
+    def action_go_up(self) -> None:
+        action_up = getattr(self.parent, "action_up", None)
+        if action_up:
+            action_up()
+
+
 class JobTable(Table):
     """Jobs keyed by full job ID; keeps the cursor on the same job across refreshes."""
 

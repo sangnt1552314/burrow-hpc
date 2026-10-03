@@ -13,7 +13,7 @@ from hpit.core.units import human_bytes
 from hpit.tui.pages.base import Page
 from hpit.tui.theme import MUTED
 from hpit.tui.util import call_backend, format_time
-from hpit.tui.widgets.tables import Table
+from hpit.tui.widgets.tables import NavTable
 
 
 LARGE_FILE_MB = 1024
@@ -25,7 +25,7 @@ class FilesPage(Page):
     TITLE = "Files"
 
     BINDINGS = [
-        Binding("backspace", "up", "Up"),
+        Binding("backspace", "up", "Back", show=False),
         Binding("s", "go('scratch')", "Scratch"),
         Binding("tilde", "go('home')", "Home", key_display="~"),
         Binding("b", "large_files", "Big files"),
@@ -37,13 +37,14 @@ class FilesPage(Page):
         # "browse" a directory, or show "large" files found under it.
         self.mode = "browse"
         self.dirs = set()
+        self.return_to: Optional[str] = None
 
     def compose(self) -> ComposeResult:
         yield Static("", id="files-path", classes="message")
-        yield Table(id="files-table")
+        yield NavTable(id="files-table")
 
     def on_mount(self) -> None:
-        self.query_one("#files-table", Table).add_columns("Name", "Size", "Modified")
+        self.query_one("#files-table", NavTable).add_columns("Name", "Size", "Modified")
 
     def load(self) -> None:
         self.open_path(self.path)
@@ -63,7 +64,7 @@ class FilesPage(Page):
     def action_large_files(self) -> None:
         self.mode = "large"
         self._set_status(f"{self.path}\nSearching for files over {LARGE_FILE_MB // 1024} GB… (find can take a while)")
-        self.query_one("#files-table", Table).clear()
+        self.query_one("#files-table", NavTable).clear()
         self.refresh_bindings()
         self.search_large(self.path)
 
@@ -76,7 +77,7 @@ class FilesPage(Page):
         if path != self.path or mode != self.mode:
             return  # The user moved on while this was loading.
 
-        table = self.query_one("#files-table", Table)
+        table = self.query_one("#files-table", NavTable)
         table.clear()
         self.dirs = {e.path for e in entries or [] if e.is_dir}
         if entries is None:
@@ -100,11 +101,14 @@ class FilesPage(Page):
             )
         else:
             self._set_status(f"{path}\n{len(entries)} items")
+            if self.return_to in table.rows:
+                table.move_cursor(row=table.get_row_index(self.return_to))
+            self.return_to = None
 
     def _set_status(self, text) -> None:
         self.query_one("#files-path", Static).update(text)
 
-    def on_data_table_row_selected(self, event: Table.RowSelected) -> None:
+    def on_data_table_row_selected(self, event: NavTable.RowSelected) -> None:
         event.stop()
         path = event.row_key.value
         if path in self.dirs:
@@ -119,10 +123,11 @@ class FilesPage(Page):
         if self.mode == "large":
             self.open_path(self.path)
         else:
+            self.return_to = self.path
             self.open_path(os.path.dirname(self.path))
 
     def action_go(self, place: str) -> None:
         self.open_path(config.SCRATCH if place == "scratch" else os.path.expanduser("~"))
 
-    def main_widget(self) -> Table:
-        return self.query_one("#files-table", Table)
+    def main_widget(self) -> NavTable:
+        return self.query_one("#files-table", NavTable)

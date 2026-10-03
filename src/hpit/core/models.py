@@ -70,6 +70,11 @@ class Quota:
     reported_at: Optional[float] = None
 
     @property
+    def known(self) -> bool:
+        """False when no quota report was found for this location."""
+        return self.limit_bytes > 0
+
+    @property
     def percent(self) -> float:
         return 100.0 * self.used_bytes / self.limit_bytes if self.limit_bytes else 0.0
 

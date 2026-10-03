@@ -15,8 +15,8 @@ HPIT only runs cheap, read-only system commands (`qstat`, `df`, `find`,
 - **Cluster** — free GPUs per node and running/waiting jobs per queue (like `hpc gstat`)
 - **Job details** — resources, node, project, script, working directory, log paths
 - **Logs** — tail stdout / stderr using the paths PBS reports; follow mode
-- **Storage** — home and scratch quota (from the site reports `hpc space` uses) and per-folder sizes (`du`, cached)
-- **Files** — read-only browser with sizes, dates, and a "files over 1 GB" search
+- **Storage** — home, scratch and your project folders (`/scratch/Projects/…`, `/Project_Storage/…`) with quotas (from the reports `hpc space` uses); open one with `→` to see folder sizes (`du`, cached), `←` to go back
+- **Files** — read-only browser (`→` open, `←` back) with sizes, dates, and a "files over 1 GB" search
 - **Tools** — doctor page: versions, paths, configuration
 - **Cancel job** — `k`, always behind a confirmation showing the exact job ID and name
 - **Mock mode** — realistic fake data for developing without PBS
@@ -39,7 +39,7 @@ Make sure `~/.local/bin` is on your `PATH`.
 hpit jobs [-a]              # your jobs (-a includes finished jobs)
 hpit job <job-id>           # details of one job
 hpit logs <job-id> [-e] [-n 100]   # tail stdout (or stderr with -e)
-hpit storage [path] [--scan]       # home/scratch quota; folder sizes from cache or a new du scan
+hpit storage [path] [--scan]       # quotas for home, scratch, project folders; folder sizes (cache or new du scan)
 hpit projects               # GPU-hours left per project (needs amgr login)
 hpit usage <project> [start] [end] # members' usage + live jobs; start/end YYYY-MM-DD, or YYYY-MM for a month (default: this month)
 hpit cluster                # free GPUs and queue status

@@ -49,7 +49,7 @@ class HPITApp(App):
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh", "Refresh"),
         Binding("question_mark", "help", "Help", key_display="?"),
-        Binding("escape", "back", "Back"),
+        Binding("escape", "back", "Menu"),
     ] + [
         Binding(str(i), f"show_page('{page_id}')", show=False)
         for i, (page_id, _, _) in enumerate(PAGES, start=1)
