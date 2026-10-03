@@ -1,17 +1,17 @@
 import sys
 
-from burrow.core.pbs import get_jobs, get_jobs_raw
+from hpit.core.pbs import get_jobs, get_jobs_raw
 
 
 def main():
     if len(sys.argv) < 2:
-        print("Burrow HPC")
+        print("HPIT - HPC Interactive Terminal")
         print()
         print("Usage:")
-        print("  burrow jobs")
-        print("  burrow storage")
-        print("  burrow tui")
-        print("  burrow web")
+        print("  hpit jobs")
+        print("  hpit storage")
+        print("  hpit tui")
+        print("  hpit web")
         return
 
     command = sys.argv[1]
